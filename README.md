@@ -1,6 +1,8 @@
 # chromium-webgl-dx11-shared-texture
 Render a system wide shared texture through WebGL in Chromium
 
+**Supported CEF release: 6367-124.0.6367.60**
+
 ## Description
 
 This Chromium patch makes it possible to render an external Dx11 texture within WebGL2, providing high-performance texture sharing capability. It adds a new custom ANGLE extension (GL_ANGLE_shared_external_surface) to Chromium which defines its WebGL2 API (gl.texImage2DShared(uint32)) to accept Dx11 shared handles from IDXGIResource::GetSharedHandle for a GL texture.
