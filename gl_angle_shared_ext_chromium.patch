@@ -1,0 +1,138 @@
+diff --git a/gpu/command_buffer/build_gles2_cmd_buffer.py b/gpu/command_buffer/build_gles2_cmd_buffer.py
+index 4ec4304d13fe0..5dcaed3e8162f 100755
+--- a/gpu/command_buffer/build_gles2_cmd_buffer.py
++++ b/gpu/command_buffer/build_gles2_cmd_buffer.py
+@@ -3252,6 +3252,12 @@ _FUNCTION_INFO = {
+     'es3': True,
+     'trace_level': 2,
+   },
++  'TexImage2DShared': {
++    'decoder_func': 'DoTexImage2DShared',
++    'extension': 'ANGLE_shared_external_surface',
++    'unit_test': False,
++    'client_test': False,
++  },
+   'TexParameterf': {
+     'decoder_func': 'DoTexParameterf',
+     'valid_args': {
+diff --git a/gpu/command_buffer/gles2_cmd_buffer_functions.txt b/gpu/command_buffer/gles2_cmd_buffer_functions.txt
+index 4dacf67c6585a..a0b9f1413f8f4 100644
+--- a/gpu/command_buffer/gles2_cmd_buffer_functions.txt
++++ b/gpu/command_buffer/gles2_cmd_buffer_functions.txt
+@@ -191,6 +191,7 @@ GL_APICALL void         GL_APIENTRY glTexParameteriv (GLenumTextureBindTarget ta
+ GL_APICALL void         GL_APIENTRY glTexStorage3D (GLenumTexture3DTarget target, GLsizei levels, GLenumTextureInternalFormatStorage internalFormat, GLsizei width, GLsizei height, GLsizei depth);
+ GL_APICALL void         GL_APIENTRY glTexSubImage2D (GLenumTextureTarget target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenumTextureFormat format, GLenumPixelType type, const void* pixels);
+ GL_APICALL void         GL_APIENTRY glTexSubImage3D (GLenumTexture3DTarget target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenumTextureFormat format, GLenumPixelType type, const void* pixels);
++GL_APICALL void         GL_APIENTRY glTexImage2DShared (GLuint handle);
+ GL_APICALL void         GL_APIENTRY glTransformFeedbackVaryings (GLidProgram program, GLsizeiNotNegative count, const char* const* varyings, GLenumBufferMode buffermode);
+ GL_APICALL void         GL_APIENTRY glUniform1f (GLintUniformLocation location, GLfloat x);
+ GL_APICALL void         GL_APIENTRY glUniform1fv (GLintUniformLocation location, GLsizei count, const GLfloat* v);
+diff --git a/gpu/command_buffer/service/gles2_cmd_decoder.cc b/gpu/command_buffer/service/gles2_cmd_decoder.cc
+index c72236dd3ac2a..74457bcbc6b92 100644
+--- a/gpu/command_buffer/service/gles2_cmd_decoder.cc
++++ b/gpu/command_buffer/service/gles2_cmd_decoder.cc
+@@ -1963,6 +1963,8 @@ class GLES2DecoderImpl : public GLES2Decoder,
+                             GLenum pname,
+                             const volatile GLint* params);
+ 
++  void DoTexImage2DShared(GLuint handle);
++
+   // Wrappers for glTexParameter functions.
+   void DoTexParameterf(GLenum target, GLenum pname, GLfloat param);
+   void DoTexParameteri(GLenum target, GLenum pname, GLint param);
+@@ -8882,6 +8884,10 @@ void GLES2DecoderImpl::DoSamplerParameteriv(GLuint client_id,
+                                    sampler, pname, params[0]);
+ }
+ 
++void GLES2DecoderImpl::DoTexImage2DShared(GLuint handle) {
++	api()->glTexImage2DSharedFn(handle);
++}
++
+ void GLES2DecoderImpl::DoTexParameterf(
+     GLenum target, GLenum pname, GLfloat param) {
+   TextureRef* texture = texture_manager()->GetTextureInfoForTarget(
+diff --git a/gpu/command_buffer/service/gles2_cmd_decoder_passthrough_doer_prototypes.h b/gpu/command_buffer/service/gles2_cmd_decoder_passthrough_doer_prototypes.h
+index f2e038c117f2a..064a5e88c82e1 100644
+--- a/gpu/command_buffer/service/gles2_cmd_decoder_passthrough_doer_prototypes.h
++++ b/gpu/command_buffer/service/gles2_cmd_decoder_passthrough_doer_prototypes.h
+@@ -589,6 +589,7 @@ error::Error DoTexParameterf(GLenum target, GLenum pname, GLfloat param);
+ error::Error DoTexParameterfv(GLenum target,
+                               GLenum pname,
+                               const volatile GLfloat* params);
++error::Error DoTexImage2DShared(GLuint handle);
+ error::Error DoTexParameteri(GLenum target, GLenum pname, GLint param);
+ error::Error DoTexParameteriv(GLenum target,
+                               GLenum pname,
+diff --git a/gpu/command_buffer/service/gles2_cmd_decoder_passthrough_doers.cc b/gpu/command_buffer/service/gles2_cmd_decoder_passthrough_doers.cc
+index 91f9ef1924abc..156de77e87c51 100644
+--- a/gpu/command_buffer/service/gles2_cmd_decoder_passthrough_doers.cc
++++ b/gpu/command_buffer/service/gles2_cmd_decoder_passthrough_doers.cc
+@@ -3180,6 +3180,11 @@ error::Error GLES2DecoderPassthroughImpl::DoTexParameterfv(
+   return error::kNoError;
+ }
+ 
++error::Error GLES2DecoderPassthroughImpl::DoTexImage2DShared(GLuint handle) {
++  api()->glTexImage2DSharedFn(handle);
++  return error::kNoError;
++}
++
+ error::Error GLES2DecoderPassthroughImpl::DoTexParameteri(GLenum target,
+                                                           GLenum pname,
+                                                           GLint param) {
+diff --git a/third_party/blink/renderer/modules/webgl/webgl2_rendering_context_base.cc b/third_party/blink/renderer/modules/webgl/webgl2_rendering_context_base.cc
+index a760e2e71d828..96fba7ab80a03 100644
+--- a/third_party/blink/renderer/modules/webgl/webgl2_rendering_context_base.cc
++++ b/third_party/blink/renderer/modules/webgl/webgl2_rendering_context_base.cc
+@@ -2387,6 +2387,12 @@ void WebGL2RenderingContextBase::texSubImage3D(
+   TexImageHelperImageBitmap(params, bitmap, exception_state);
+ }
+ 
++void WebGL2RenderingContextBase::texImage2DShared(GLuint handle) {
++  if (isContextLost())
++    return;
++  ContextGL()->TexImage2DShared(handle);
++}
++
+ void WebGL2RenderingContextBase::copyTexSubImage3D(GLenum target,
+                                                    GLint level,
+                                                    GLint xoffset,
+diff --git a/third_party/blink/renderer/modules/webgl/webgl2_rendering_context_base.h b/third_party/blink/renderer/modules/webgl/webgl2_rendering_context_base.h
+index d32d464c57cab..7f9cb2546a6e0 100644
+--- a/third_party/blink/renderer/modules/webgl/webgl2_rendering_context_base.h
++++ b/third_party/blink/renderer/modules/webgl/webgl2_rendering_context_base.h
+@@ -674,6 +674,8 @@ class WebGL2RenderingContextBase : public WebGLRenderingContextBase {
+                                GLenum format,
+                                MaybeShared<DOMArrayBufferView> data);
+ 
++  void texImage2DShared(GLuint);
++
+   /* Programs and shaders */
+   GLint getFragDataLocation(WebGLProgram*, const String&);
+ 
+diff --git a/third_party/blink/renderer/modules/webgl/webgl2_rendering_context_base.idl b/third_party/blink/renderer/modules/webgl/webgl2_rendering_context_base.idl
+index 16ccf9b8959f7..311f9e140493f 100644
+--- a/third_party/blink/renderer/modules/webgl/webgl2_rendering_context_base.idl
++++ b/third_party/blink/renderer/modules/webgl/webgl2_rendering_context_base.idl
+@@ -347,6 +347,7 @@ interface mixin WebGL2RenderingContextBase {
+         GLint yoffset, GLint zoffset, GLsizei width, GLsizei height,
+         GLsizei depth, GLenum format, GLenum type,
+         [AllowShared, BufferSourceTypeNoSizeLimit] ArrayBufferView pixels, optional GLuint srcOffset = 0);
++    void texImage2DShared(GLuint handle);
+ 
+     void copyTexSubImage3D(GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLint x, GLint y, GLsizei width, GLsizei height);
+ 
+diff --git a/ui/gl/generate_bindings.py b/ui/gl/generate_bindings.py
+index 12df91de42663..cb33bbb430aad 100755
+--- a/ui/gl/generate_bindings.py
++++ b/ui/gl/generate_bindings.py
+@@ -2140,6 +2140,10 @@ GL_FUNCTIONS = [
+       'GLenum target, GLint level, GLint internalformat, GLsizei width, '
+       'GLsizei height, GLint border, GLenum format, GLenum type, '
+       'GLsizei bufSize, const void* pixels', },
++{ 'return_type': 'void',
++  'versions': [{ 'name': 'glTexImage2DShared',
++                 'extensions': ['GL_ANGLE_shared_external_surface'] }],
++  'arguments': 'GLuint handle', },
+ { 'return_type': 'void',
+   'versions': [{ 'name': 'glTexImage3D' }],
+   'arguments':

@@ -1,0 +1,743 @@
+diff --git a/include/GLES2/gl2ext_angle.h b/include/GLES2/gl2ext_angle.h
+index 7e08b1cbb..6afd5a39d 100644
+--- a/include/GLES2/gl2ext_angle.h
++++ b/include/GLES2/gl2ext_angle.h
+@@ -518,6 +518,14 @@ GL_APICALL void GL_APIENTRY glGetRenderbufferImageANGLE (GLenum target, GLenum f
+ #endif
+ #endif /* GL_ANGLE_get_image */
+ 
++#ifndef GL_ANGLE_shared_external_surface
++#define GL_ANGLE_shared_external_surface 1
++typedef void (GL_APIENTRYP PFNGLTEXIMAGE2DSHAREDPROC) (GLuint handle);
++#ifdef GL_GLEXT_PROTOTYPES
++GL_APICALL void GL_APIENTRY glTexImage2DShared (GLuint handle);
++#endif
++#endif /* GL_ANGLE_shared_external_surface */
++
+ #ifndef GL_WEBGL_video_texture
+ #define GL_WEBGL_video_texture 1
+ #define GL_TEXTURE_VIDEO_IMAGE_WEBGL 0x9248
+diff --git a/scripts/extension_data/intel_630_win10.json b/scripts/extension_data/intel_630_win10.json
+index b86f77af5..6698f251c 100644
+--- a/scripts/extension_data/intel_630_win10.json
++++ b/scripts/extension_data/intel_630_win10.json
+@@ -15,6 +15,7 @@
+         "GL_ANGLE_framebuffer_blit",
+         "GL_ANGLE_framebuffer_multisample",
+         "GL_ANGLE_get_image",
++        "GL_ANGLE_shared_external_surface",
+         "GL_ANGLE_get_serialized_context_string",
+         "GL_ANGLE_get_tex_level_parameter",
+         "GL_ANGLE_instanced_arrays",
+diff --git a/scripts/extension_data/nvidia_1660_win10.json b/scripts/extension_data/nvidia_1660_win10.json
+index e80e88cac..71d7c55fb 100644
+--- a/scripts/extension_data/nvidia_1660_win10.json
++++ b/scripts/extension_data/nvidia_1660_win10.json
+@@ -15,6 +15,7 @@
+         "GL_ANGLE_framebuffer_blit",
+         "GL_ANGLE_framebuffer_multisample",
+         "GL_ANGLE_get_image",
++        "GL_ANGLE_shared_external_surface",
+         "GL_ANGLE_get_serialized_context_string",
+         "GL_ANGLE_get_tex_level_parameter",
+         "GL_ANGLE_instanced_arrays",
+diff --git a/scripts/extension_data/swiftshader_win10.json b/scripts/extension_data/swiftshader_win10.json
+index 9a4770d35..db56a07c0 100644
+--- a/scripts/extension_data/swiftshader_win10.json
++++ b/scripts/extension_data/swiftshader_win10.json
+@@ -28,6 +28,7 @@
+         "GL_ANGLE_rgbx_internal_format",
+         "GL_ANGLE_robust_client_memory",
+         "GL_ANGLE_robust_fragment_shader_output",
++        "GL_ANGLE_shared_external_surface",
+         "GL_ANGLE_texture_compression_dxt3",
+         "GL_ANGLE_texture_compression_dxt5",
+         "GL_ANGLE_texture_multisample",
+diff --git a/scripts/extension_data/swiftshader_win10_gles1.json b/scripts/extension_data/swiftshader_win10_gles1.json
+index bbea98e4c..6cc15e810 100644
+--- a/scripts/extension_data/swiftshader_win10_gles1.json
++++ b/scripts/extension_data/swiftshader_win10_gles1.json
+@@ -12,6 +12,7 @@
+         "GL_ANGLE_framebuffer_blit",
+         "GL_ANGLE_framebuffer_multisample",
+         "GL_ANGLE_get_image",
++        "GL_ANGLE_shared_external_surface",
+         "GL_ANGLE_get_serialized_context_string",
+         "GL_ANGLE_get_tex_level_parameter",
+         "GL_ANGLE_instanced_arrays",
+diff --git a/scripts/gl_angle_ext.xml b/scripts/gl_angle_ext.xml
+index 3ec556ffa..21c2daf7a 100644
+--- a/scripts/gl_angle_ext.xml
++++ b/scripts/gl_angle_ext.xml
+@@ -874,6 +874,10 @@
+             <param len="COMPSIZE(target,level,format,type)">void *<name>pixels</name></param>
+             <alias name="glGetTexImage"/>
+         </command>
++        <command>
++            <proto>void <name>glTexImage2DShared</name></proto>
++            <param><ptype>GLuint</ptype> <name>handle</name></param>
++        </command>
+         <command>
+             <proto>void <name>glGetCompressedTexImageANGLE</name></proto>
+             <param group="TextureTarget"><ptype>GLenum</ptype> <name>target</name></param>
+@@ -1270,6 +1274,11 @@
+                 <command name="glGetRenderbufferImageANGLE"/>
+             </require>
+         </extension>
++        <extension name ="GL_ANGLE_shared_external_surface" supported='gles2'>
++            <require>
++                <command name="glTexImage2DShared"/>
++            </require>
++        </extension>
+         <extension name ="GL_ANGLE_get_tex_level_parameter" supported='gles2'>
+             <require>
+                 <command name="glGetTexLevelParameterfvANGLE"/>
+diff --git a/scripts/registry_xml.py b/scripts/registry_xml.py
+index 15d589551..6c56076f3 100644
+--- a/scripts/registry_xml.py
++++ b/scripts/registry_xml.py
+@@ -242,6 +242,7 @@ angle_es_only_extensions = [
+     "GL_ANGLE_robust_client_memory",
+     "GL_ANGLE_robust_resource_initialization",
+     "GL_ANGLE_shader_binary",
++    "GL_ANGLE_shared_external_surface",
+     "GL_ANGLE_webgl_compatibility",
+     "GL_CHROMIUM_bind_generates_resource",
+     "GL_CHROMIUM_bind_uniform_location",
+diff --git a/src/libANGLE/Context.cpp b/src/libANGLE/Context.cpp
+index 16ec5d208..cb048dc28 100644
+--- a/src/libANGLE/Context.cpp
++++ b/src/libANGLE/Context.cpp
+@@ -3797,6 +3797,7 @@ Extensions Context::generateSupportedExtensions() const
+     supportedExtensions.clientArraysANGLE             = true;
+     supportedExtensions.requestExtensionANGLE         = true;
+     supportedExtensions.multiDrawANGLE                = true;
++    supportedExtensions.sharedExternalSurfaceANGLE    = true;
+ 
+     // Enable the no error extension if the context was created with the flag.
+     supportedExtensions.noErrorKHR = skipValidation();
+@@ -6219,6 +6220,12 @@ void Context::texStorage3DMultisample(TextureType target,
+                                                      ConvertToBool(fixedsamplelocations)));
+ }
+ 
++void Context::texImage2DShared(GLuint handle)
++{
++    Texture *texture = getTextureByTarget(TextureTarget::_2D);
++    ANGLE_CONTEXT_TRY(texture->setTexImage2DShared(this, handle));
++}
++
+ void Context::texImage2DExternal(TextureTarget target,
+                                  GLint level,
+                                  GLint internalformat,
+diff --git a/src/libANGLE/Texture.cpp b/src/libANGLE/Texture.cpp
+index 0cb215ba4..1699639ad 100644
+--- a/src/libANGLE/Texture.cpp
++++ b/src/libANGLE/Texture.cpp
+@@ -1833,6 +1833,36 @@ angle::Result Texture::setStorageExternalMemory(Context *context,
+     return angle::Result::Continue;
+ }
+ 
++angle::Result Texture::setTexImage2DShared(Context *context, GLuint handle)
++{
++    ANGLE_TRY(releaseTexImageInternal(context));
++
++    egl::RefCountObjectReleaser<egl::Image> releaseImage;
++    ANGLE_TRY(orphanImages(context, &releaseImage));
++
++    ANGLE_TRY(mTexture->setTexImage2DShared(context,
++                                            handle));
++
++    GLsizei levels        = 1;
++    GLenum internalFormat = GL_RGBA8;
++    Extents size = {};
++    mTexture->GetBaseLevelExtents(size);
++
++
++    mState.mImmutableFormat = true;
++    mState.mImmutableLevels = static_cast<GLuint>(levels);
++    mState.clearImageDescs();
++    mState.setImageDescChain(0, static_cast<GLuint>(levels - 1), size, Format(internalFormat),
++                             InitState::Initialized);
++
++    mDirtyBits.set(DIRTY_BIT_BASE_LEVEL);
++    mDirtyBits.set(DIRTY_BIT_MAX_LEVEL);
++
++    signalDirtyStorage(InitState::Initialized);
++
++    return angle::Result::Continue;
++}
++
+ angle::Result Texture::generateMipmap(Context *context)
+ {
+     // Release from previous calls to eglBindTexImage, to avoid calling the Impl after
+diff --git a/src/libANGLE/Texture.h b/src/libANGLE/Texture.h
+index 9f69e7c9d..ba12ea590 100644
+--- a/src/libANGLE/Texture.h
++++ b/src/libANGLE/Texture.h
+@@ -558,6 +558,8 @@ class Texture final : public RefCountObject<TextureID>,
+                                            GLbitfield usageFlags,
+                                            const void *imageCreateInfoPNext);
+ 
++    angle::Result setTexImage2DShared(Context *context, GLuint handle);
++
+     angle::Result setImageExternal(Context *context,
+                                    TextureTarget target,
+                                    GLint level,
+diff --git a/src/libANGLE/renderer/TextureImpl.cpp b/src/libANGLE/renderer/TextureImpl.cpp
+index 7e69330e2..62ce1fa50 100644
+--- a/src/libANGLE/renderer/TextureImpl.cpp
++++ b/src/libANGLE/renderer/TextureImpl.cpp
+@@ -117,6 +117,12 @@ angle::Result TextureImpl::copy3DSubTexture(const gl::Context *context,
+     return angle::Result::Stop;
+ }
+ 
++angle::Result TextureImpl::setTexImage2DShared(const gl::Context *context, GLuint handle)
++{
++    UNREACHABLE();
++    return angle::Result::Stop;
++}
++
+ angle::Result TextureImpl::setImageExternal(const gl::Context *context,
+                                             const gl::ImageIndex &index,
+                                             GLenum internalFormat,
+diff --git a/src/libANGLE/renderer/TextureImpl.h b/src/libANGLE/renderer/TextureImpl.h
+index d4a0015e7..1ab22ad60 100644
+--- a/src/libANGLE/renderer/TextureImpl.h
++++ b/src/libANGLE/renderer/TextureImpl.h
+@@ -185,6 +185,8 @@ class TextureImpl : public FramebufferAttachmentObjectImpl
+                                                    GLbitfield usageFlags,
+                                                    const void *imageCreateInfoPNext) = 0;
+ 
++    virtual angle::Result setTexImage2DShared(const gl::Context *context, GLuint handle);
++
+     virtual angle::Result setImageExternal(const gl::Context *context,
+                                            const gl::ImageIndex &index,
+                                            GLenum internalFormat,
+@@ -245,6 +247,8 @@ class TextureImpl : public FramebufferAttachmentObjectImpl
+ 
+     const gl::TextureState &getState() const { return mState; }
+ 
++    virtual bool GetBaseLevelExtents(gl::Extents &extents) { return false; }
++
+     void setContentsObservers(gl::TextureBufferContentsObservers *observers)
+     {
+         mBufferContentsObservers = observers;
+diff --git a/src/libANGLE/renderer/d3d/RendererD3D.h b/src/libANGLE/renderer/d3d/RendererD3D.h
+index 19e8afdc9..a9419aedf 100644
+--- a/src/libANGLE/renderer/d3d/RendererD3D.h
++++ b/src/libANGLE/renderer/d3d/RendererD3D.h
+@@ -326,6 +326,8 @@ class RendererD3D : public BufferFactoryD3D
+                                     bool unpackUnmultiplyAlpha)                        = 0;
+     virtual TextureStorage *createTextureStorage2D(SwapChainD3D *swapChain,
+                                                    const std::string &label)           = 0;
++    virtual TextureStorage *createTextureStorage2DShared(SwapChainD3D *swapChain,
++                                           const std::string &label, GLuint handle) = 0;
+     virtual TextureStorage *createTextureStorageEGLImage(EGLImageD3D *eglImage,
+                                                          RenderTargetD3D *renderTargetD3D,
+                                                          const std::string &label)     = 0;
+diff --git a/src/libANGLE/renderer/d3d/TextureD3D.cpp b/src/libANGLE/renderer/d3d/TextureD3D.cpp
+index 141cbe6a8..0ca754745 100644
+--- a/src/libANGLE/renderer/d3d/TextureD3D.cpp
++++ b/src/libANGLE/renderer/d3d/TextureD3D.cpp
+@@ -207,6 +207,48 @@ angle::Result TextureD3D::setStorageExternalMemory(const gl::Context *context,
+     return angle::Result::Continue;
+ }
+ 
++angle::Result TextureD3D::setTexImage2DShared(const gl::Context *context, GLuint handle)
++{
++    ANGLE_HR_UNREACHABLE(GetImplAs<ContextD3D>(context));
++    return angle::Result::Stop;
++}
++
++angle::Result TextureD3D_2D::setTexImage2DShared(const gl::Context *context, GLuint handle)
++{
++    ANGLE_TRY(releaseTexStorage(context, gl::TexLevelMask()));
++
++    TextureStorage *store = mRenderer->createTextureStorage2DShared(nullptr,
++        mState.getLabel(), handle);
++
++	GLenum texFormat;
++	unsigned int texWidth, texHeight;
++	if (store->getTextureStorageFormat(texFormat, texWidth, texHeight))
++	{
++		gl::Extents size(texWidth, texHeight, 1);
++		ANGLE_TRY(redefineImage(context, 0, texFormat, size, true));
++	}
++    else
++    {
++        delete store;
++        return angle::Result::Stop;
++    }
++
++    mTexStorage = store;
++
++	mEGLImageTarget = false;
++    mDirtyImages = false;
++	mImmutable = true;
++    mImageArray[0]->markClean();
++
++    return angle::Result::Continue;
++}
++
++bool TextureD3D_2D::GetBaseLevelExtents(gl::Extents &extents)
++{
++    extents = gl::Extents { getWidth(0), getHeight(0), 1 };
++    return true;
++}
++
+ bool TextureD3D::shouldUseSetData(const ImageD3D *image) const
+ {
+     if (!mRenderer->getFeatures().setDataFasterThanImageUpload.enabled)
+diff --git a/src/libANGLE/renderer/d3d/TextureD3D.h b/src/libANGLE/renderer/d3d/TextureD3D.h
+index f5b8f61f2..677b9e9fe 100644
+--- a/src/libANGLE/renderer/d3d/TextureD3D.h
++++ b/src/libANGLE/renderer/d3d/TextureD3D.h
+@@ -80,6 +80,8 @@ class TextureD3D : public TextureImpl, public angle::ObserverInterface
+                                            GLbitfield usageFlags,
+                                            const void *imageCreateInfoPNext) override;
+ 
++    angle::Result setTexImage2DShared(const gl::Context *context, GLuint handle) override;
++
+     bool isImmutable() const { return mImmutable; }
+ 
+     virtual angle::Result getRenderTarget(const gl::Context *context,
+@@ -309,6 +311,9 @@ class TextureD3D_2D : public TextureD3D
+                              GLenum internalFormat,
+                              const gl::Extents &size) override;
+ 
++	angle::Result setTexImage2DShared(const gl::Context *context, GLuint handle) override;
++    bool GetBaseLevelExtents(gl::Extents &extents) override;
++
+     angle::Result bindTexImage(const gl::Context *context, egl::Surface *surface) override;
+     angle::Result releaseTexImage(const gl::Context *context) override;
+ 
+diff --git a/src/libANGLE/renderer/d3d/d3d11/Renderer11.cpp b/src/libANGLE/renderer/d3d/d3d11/Renderer11.cpp
+index 4a313d127..a12df540b 100644
+--- a/src/libANGLE/renderer/d3d/d3d11/Renderer11.cpp
++++ b/src/libANGLE/renderer/d3d/d3d11/Renderer11.cpp
+@@ -3457,6 +3457,12 @@ TextureStorage *Renderer11::createTextureStorage2D(GLenum internalformat,
+                                    hintLevelZeroOnly);
+ }
+ 
++TextureStorage *Renderer11::createTextureStorage2DShared(SwapChainD3D *swapChain,
++                                           const std::string &label, GLuint handle)
++{
++    return new TextureStorage11_2DShared(this, nullptr, label, handle);
++}
++
+ TextureStorage *Renderer11::createTextureStorageCube(GLenum internalformat,
+                                                      BindFlags bindFlags,
+                                                      int size,
+diff --git a/src/libANGLE/renderer/d3d/d3d11/TextureStorage11.cpp b/src/libANGLE/renderer/d3d/d3d11/TextureStorage11.cpp
+index 9b1a08df6..c95d27ede 100644
+--- a/src/libANGLE/renderer/d3d/d3d11/TextureStorage11.cpp
++++ b/src/libANGLE/renderer/d3d/d3d11/TextureStorage11.cpp
+@@ -1961,6 +1961,258 @@ void TextureStorage11_External::onLabelUpdate()
+     }
+ }
+ 
++inline HANDLE handleFromUINT(GLuint handle)
++{
++    return (HANDLE)UINT(handle);
++}
++
++static GLenum GetFormatFromSharedResource(Renderer11 *renderer, const HANDLE handle)
++{
++	ID3D11Device *pd3dDevice = renderer->getDevice();
++	ID3D11Texture2D *sharedTextureIn = nullptr;
++	pd3dDevice->OpenSharedResource(handle, IID_PPV_ARGS(&sharedTextureIn));
++
++    GLenum result = GL_RGBA8;
++    if (sharedTextureIn != nullptr)
++    {
++        D3D11_TEXTURE2D_DESC desc = {};
++        sharedTextureIn->GetDesc(&desc);
++        
++        switch (desc.Format)
++        {
++            case DXGI_FORMAT_R16G16B16A16_FLOAT:
++                    result = GL_RGBA16F;
++                break;
++            default:
++                break;
++        }
++
++        sharedTextureIn->Release();
++    }
++
++    return result;
++}
++
++TextureStorage11_2DShared::TextureStorage11_2DShared(
++    Renderer11 *renderer,
++    SwapChain11 *swapChain11,
++    const std::string &label,
++    GLuint handle)
++    : TextureStorage11(renderer, D3D11_BIND_SHADER_RESOURCE, 0, GetFormatFromSharedResource(renderer, handleFromUINT(handle)), label),
++      mAssociatedImage(nullptr)
++{
++	const HANDLE shareHandle = handleFromUINT(handle);
++
++	ID3D11Texture2D *sharedTextureIn = nullptr;
++	ID3D11Device *pd3dDevice = mRenderer->getDevice();
++	pd3dDevice->OpenSharedResource(shareHandle, IID_PPV_ARGS(&sharedTextureIn));
++
++    if (sharedTextureIn != nullptr)
++    {
++        mTexture.set(sharedTextureIn, mFormatInfo);
++
++        mSubresourceIndex = 0;
++        mTexture.get()->AddRef();
++        mMipLevels = 1;
++
++        D3D11_TEXTURE2D_DESC desc = {};
++        mTexture.getDesc(&desc);
++        mTextureWidth  = desc.Width;
++        mTextureHeight = desc.Height;
++        mTextureDepth  = 1;
++        mHasKeyedMutex = (desc.MiscFlags & D3D11_RESOURCE_MISC_SHARED_KEYEDMUTEX) != 0;
++
++        sharedTextureIn->Release();
++    }
++}
++
++TextureStorage11_2DShared::~TextureStorage11_2DShared() {}
++
++bool TextureStorage11_2DShared::getTextureStorageFormat(GLenum &internalFormat, unsigned int &width, unsigned int &height)
++{
++    if (mMipLevels < 1)
++    {
++        return false;
++    }
++
++	internalFormat = mFormatInfo.internalFormat;
++	width = mTextureWidth;
++	height = mTextureHeight;
++	return true;
++}
++
++angle::Result TextureStorage11_2DShared::onDestroy(const gl::Context *context)
++{
++    if (mHasKeyedMutex)
++    {
++        // If the keyed mutex is released that will unbind it and cause the state cache to become
++        // desynchronized.
++        mRenderer->getStateManager()->invalidateBoundViews();
++    }
++
++    if (mAssociatedImage != nullptr)
++    {
++        mAssociatedImage->verifyAssociatedStorageValid(this);
++
++        // We must let the Images recover their data before we delete it from the
++        // TextureStorage.
++        ANGLE_TRY(mAssociatedImage->recoverFromAssociatedStorage(context));
++    }
++
++    return angle::Result::Continue;
++}
++
++angle::Result TextureStorage11_2DShared::copyToStorage(const gl::Context *context,
++                                                        TextureStorage *destStorage)
++{
++    UNIMPLEMENTED();
++    return angle::Result::Continue;
++}
++
++void TextureStorage11_2DShared::associateImage(Image11 *image, const gl::ImageIndex &index)
++{
++    ASSERT(index.getLevelIndex() == 0);
++    mAssociatedImage = image;
++}
++
++void TextureStorage11_2DShared::verifyAssociatedImageValid(const gl::ImageIndex &index,
++                                                            Image11 *expectedImage)
++{
++    ASSERT(index.getLevelIndex() == 0 && mAssociatedImage == expectedImage);
++}
++
++void TextureStorage11_2DShared::disassociateImage(const gl::ImageIndex &index,
++                                                   Image11 *expectedImage)
++{
++    ASSERT(index.getLevelIndex() == 0);
++    ASSERT(mAssociatedImage == expectedImage);
++    mAssociatedImage = nullptr;
++}
++
++angle::Result TextureStorage11_2DShared::releaseAssociatedImage(const gl::Context *context,
++                                                                 const gl::ImageIndex &index,
++                                                                 Image11 *incomingImage)
++{
++    ASSERT(index.getLevelIndex() == 0);
++
++    if (mAssociatedImage != nullptr && mAssociatedImage != incomingImage)
++    {
++        mAssociatedImage->verifyAssociatedStorageValid(this);
++
++        ANGLE_TRY(mAssociatedImage->recoverFromAssociatedStorage(context));
++    }
++
++    return angle::Result::Continue;
++}
++
++angle::Result TextureStorage11_2DShared::getResource(const gl::Context *context,
++                                                      const TextureHelper11 **outResource)
++{
++    *outResource = &mTexture;
++    return angle::Result::Continue;
++}
++
++angle::Result TextureStorage11_2DShared::getMippedResource(const gl::Context *context,
++                                                            const TextureHelper11 **outResource)
++{
++    *outResource = &mTexture;
++    return angle::Result::Continue;
++}
++
++angle::Result TextureStorage11_2DShared::findRenderTarget(const gl::Context *context,
++                                                           const gl::ImageIndex &index,
++                                                           GLsizei samples,
++                                                           RenderTargetD3D **outRT) const
++{
++    // Render targets are not supported for external textures
++    ANGLE_HR_UNREACHABLE(GetImplAs<Context11>(context));
++    return angle::Result::Stop;
++}
++
++angle::Result TextureStorage11_2DShared::getRenderTarget(const gl::Context *context,
++                                                          const gl::ImageIndex &index,
++                                                          GLsizei samples,
++                                                          RenderTargetD3D **outRT)
++{
++    // Render targets are not supported for external textures
++    ANGLE_HR_UNREACHABLE(GetImplAs<Context11>(context));
++    return angle::Result::Stop;
++}
++
++angle::Result TextureStorage11_2DShared::createSRVForSampler(const gl::Context *context,
++                                                              int baseLevel,
++                                                              int mipLevels,
++                                                              DXGI_FORMAT format,
++                                                              const TextureHelper11 &texture,
++                                                              d3d11::SharedSRV *outSRV)
++{
++    // Since external textures are treates as non-mipmapped textures, we ignore mipmap levels and
++    // use the specified subresource ID the storage was created with.
++    ASSERT(mipLevels == 1);
++    ASSERT(outSRV);
++
++    D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc;
++    srvDesc.Format        = format;
++    srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2DARRAY;
++    // subresource index is equal to the mip level for 2D textures
++    srvDesc.Texture2DArray.MostDetailedMip = 0;
++    srvDesc.Texture2DArray.MipLevels       = 1;
++    srvDesc.Texture2DArray.FirstArraySlice = mSubresourceIndex;
++    srvDesc.Texture2DArray.ArraySize       = 1;
++
++    ANGLE_TRY(
++        mRenderer->allocateResource(GetImplAs<Context11>(context), srvDesc, texture.get(), outSRV));
++    outSRV->setLabels("TexStorage2DShared.SRV", &mKHRDebugLabel);
++
++    return angle::Result::Continue;
++}
++
++angle::Result TextureStorage11_2DShared::createSRVForImage(const gl::Context *context,
++                                                            int level,
++                                                            DXGI_FORMAT format,
++                                                            const TextureHelper11 &texture,
++                                                            d3d11::SharedSRV *outSRV)
++{
++    ANGLE_HR_UNREACHABLE(GetImplAs<Context11>(context));
++    return angle::Result::Stop;
++}
++
++angle::Result TextureStorage11_2DShared::createUAVForImage(const gl::Context *context,
++                                                            int level,
++                                                            DXGI_FORMAT format,
++                                                            const TextureHelper11 &texture,
++                                                            d3d11::SharedUAV *outUAV)
++{
++    ANGLE_HR_UNREACHABLE(GetImplAs<Context11>(context));
++    return angle::Result::Stop;
++}
++
++angle::Result TextureStorage11_2DShared::getSwizzleTexture(const gl::Context *context,
++                                                            const TextureHelper11 **outTexture)
++{
++    ANGLE_HR_UNREACHABLE(GetImplAs<Context11>(context));
++    return angle::Result::Stop;
++}
++
++angle::Result TextureStorage11_2DShared::getSwizzleRenderTarget(
++    const gl::Context *context,
++    int mipLevel,
++    const d3d11::RenderTargetView **outRTV)
++{
++    ANGLE_HR_UNREACHABLE(GetImplAs<Context11>(context));
++    return angle::Result::Stop;
++}
++
++void TextureStorage11_2DShared::onLabelUpdate()
++{
++    if (mTexture.valid())
++    {
++        mTexture.setKHRDebugLabel(&mKHRDebugLabel);
++    }
++}
++
++
++
+ TextureStorage11ImmutableBase::TextureStorage11ImmutableBase(Renderer11 *renderer,
+                                                              UINT bindFlags,
+                                                              UINT miscFlags,
+diff --git a/src/libANGLE/renderer/d3d/d3d11/TextureStorage11.h b/src/libANGLE/renderer/d3d/d3d11/TextureStorage11.h
+index 777ce8374..3e57e4c56 100644
+--- a/src/libANGLE/renderer/d3d/d3d11/TextureStorage11.h
++++ b/src/libANGLE/renderer/d3d/d3d11/TextureStorage11.h
+@@ -461,6 +461,77 @@ class TextureStorage11_External : public TextureStorage11
+     Image11 *mAssociatedImage;
+ };
+ 
++
++
++class TextureStorage11_2DShared : public TextureStorage11
++{
++  public:
++    TextureStorage11_2DShared(Renderer11 *renderer,
++								SwapChain11 *swapChain11,
++                               const std::string &label,
++							   GLuint handle);
++    ~TextureStorage11_2DShared() override;
++	
++	bool getTextureStorageFormat(GLenum &internalFormat, unsigned int &width, unsigned int &height) override;
++
++    angle::Result onDestroy(const gl::Context *context) override;
++
++    angle::Result getResource(const gl::Context *context,
++                              const TextureHelper11 **outResource) override;
++    angle::Result getMippedResource(const gl::Context *context,
++                                    const TextureHelper11 **outResource) override;
++    angle::Result findRenderTarget(const gl::Context *context,
++                                   const gl::ImageIndex &index,
++                                   GLsizei samples,
++                                   RenderTargetD3D **outRT) const override;
++    angle::Result getRenderTarget(const gl::Context *context,
++                                  const gl::ImageIndex &index,
++                                  GLsizei samples,
++                                  RenderTargetD3D **outRT) override;
++
++    angle::Result copyToStorage(const gl::Context *context, TextureStorage *destStorage) override;
++
++    void associateImage(Image11 *image, const gl::ImageIndex &index) override;
++    void disassociateImage(const gl::ImageIndex &index, Image11 *expectedImage) override;
++    void verifyAssociatedImageValid(const gl::ImageIndex &index, Image11 *expectedImage) override;
++    angle::Result releaseAssociatedImage(const gl::Context *context,
++                                         const gl::ImageIndex &index,
++                                         Image11 *incomingImage) override;
++    void onLabelUpdate() override;
++
++  protected:
++    angle::Result getSwizzleTexture(const gl::Context *context,
++                                    const TextureHelper11 **outTexture) override;
++    angle::Result getSwizzleRenderTarget(const gl::Context *context,
++                                         int mipLevel,
++                                         const d3d11::RenderTargetView **outRTV) override;
++
++  private:
++    angle::Result createSRVForSampler(const gl::Context *context,
++                                      int baseLevel,
++                                      int mipLevels,
++                                      DXGI_FORMAT format,
++                                      const TextureHelper11 &texture,
++                                      d3d11::SharedSRV *outSRV) override;
++    angle::Result createSRVForImage(const gl::Context *context,
++                                    int level,
++                                    DXGI_FORMAT format,
++                                    const TextureHelper11 &texture,
++                                    d3d11::SharedSRV *outSRV) override;
++    angle::Result createUAVForImage(const gl::Context *context,
++                                    int level,
++                                    DXGI_FORMAT format,
++                                    const TextureHelper11 &texture,
++                                    d3d11::SharedUAV *outUAV) override;
++
++    TextureHelper11 mTexture;
++    int mSubresourceIndex;
++    bool mHasKeyedMutex;
++
++    Image11 *mAssociatedImage;
++};
++
++
+ // A base class for texture storage classes where the associated images are not changed, nor are
+ // they accessible as images in GLES3.1+ shaders.
+ class TextureStorage11ImmutableBase : public TextureStorage11
+diff --git a/src/libANGLE/renderer/d3d/d3d9/Renderer9.h b/src/libANGLE/renderer/d3d/d3d9/Renderer9.h
+index 1d4bcf573..52528b72b 100644
+--- a/src/libANGLE/renderer/d3d/d3d9/Renderer9.h
++++ b/src/libANGLE/renderer/d3d/d3d9/Renderer9.h
+@@ -278,6 +278,8 @@ class Renderer9 : public RendererD3D
+                             bool unpackUnmultiplyAlpha) override;
+     TextureStorage *createTextureStorage2D(SwapChainD3D *swapChain,
+                                            const std::string &label) override;
++    TextureStorage *createTextureStorage2DShared(SwapChainD3D *swapChain,
++                                           const std::string &label, GLuint handle) override { return nullptr; }
+     TextureStorage *createTextureStorageEGLImage(EGLImageD3D *eglImage,
+                                                  RenderTargetD3D *renderTargetD3D,
+                                                  const std::string &label) override;
+diff --git a/src/libANGLE/validationES.cpp b/src/libANGLE/validationES.cpp
+index 42fd1a334..6e173eca5 100644
+--- a/src/libANGLE/validationES.cpp
++++ b/src/libANGLE/validationES.cpp
+@@ -8703,6 +8703,24 @@ bool ValidateLoseContextCHROMIUM(const Context *context,
+     return true;
+ }
+ 
++bool ValidateTexImage2DShared(const Context *context, angle::EntryPoint entryPoint, GLuint handle)
++{
++	TextureType target = TextureType::_2D;
++    if (!ValidTextureTarget(context, target))
++    {
++        ANGLE_VALIDATION_ERROR(GL_INVALID_ENUM, kInvalidTextureTarget);
++        return false;
++    }
++	
++    if (context->getTextureByType(target) == nullptr)
++    {
++        // Should only be possible for external textures
++        ANGLE_VALIDATION_ERROR(GL_INVALID_ENUM, kTextureNotBound);
++        return false;
++    }
++    return true;
++}
++
+ // GL_ANGLE_texture_storage_external
+ bool ValidateTexImage2DExternalANGLE(const Context *context,
+                                      angle::EntryPoint entryPoint,
+diff --git a/src/libANGLE/renderer/d3d/TextureStorage.h b/src/libANGLE/renderer/d3d/TextureStorage.h
+index 9940a3c88..c2361d46a 100644
+--- a/src/libANGLE/renderer/d3d/TextureStorage.h
++++ b/src/libANGLE/renderer/d3d/TextureStorage.h
+@@ -90,6 +90,8 @@ class TextureStorage : public angle::Subject
+ 
+     // Called by outer object when label has changed via KHR_debug extension
+     void setLabel(const std::string &newLabel);
++	
++	virtual bool getTextureStorageFormat(GLenum &internalFormat, unsigned int &width, unsigned int &height) { return false; }
+ 
+   protected:
+     virtual void onLabelUpdate() {}
+diff --git a/src/libANGLE/renderer/d3d/d3d11/Renderer11.h b/src/libANGLE/renderer/d3d/d3d11/Renderer11.h
+index 9aceb6bad..2ff24c13f 100644
+--- a/src/libANGLE/renderer/d3d/d3d11/Renderer11.h
++++ b/src/libANGLE/renderer/d3d/d3d11/Renderer11.h
+@@ -241,6 +241,8 @@ class Renderer11 : public RendererD3D
+ 
+     TextureStorage *createTextureStorage2D(SwapChainD3D *swapChain,
+                                            const std::string &label) override;
++    TextureStorage *createTextureStorage2DShared(SwapChainD3D *swapChain,
++                                           const std::string &label, GLuint handle) override;
+     TextureStorage *createTextureStorageEGLImage(EGLImageD3D *eglImage,
+                                                  RenderTargetD3D *renderTargetD3D,
+                                                  const std::string &label) override;
