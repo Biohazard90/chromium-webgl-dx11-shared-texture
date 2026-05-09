@@ -1,7 +1,7 @@
 # chromium-webgl-dx11-shared-texture
 Render a system wide shared texture through WebGL in Chromium
 
-**Supported CEF release: 6367-124.0.6367.60**
+**Supported CEF release: 7680-146.0.7680.179**
 
 ## Description
 
@@ -14,29 +14,15 @@ This Chromium patch makes it possible to render an external Dx11 texture within 
 
 ### 1. Checkout CEF + Chromium and do a full build.
 
-### 2. Checkout the following additional dependencies for the WebGL autogen process:
+### 2. Open third_party/angle/DEPS and find the current dependencies for the following thirdparty repositories:
 
-> cd chromium_git\chromium\src\third_party\angle\third_party\OpenGL-Registry\src  
-> git clone https://github.com/KhronosGroup/OpenGL-Registry .  
-> git checkout 5bae8738b23d06968e7c3a41308568120943ae77  
+> OpenGL-Registry
+> EGL-Registry
+> OpenCL-Docs
+> spirv-headers
+> vulkan-headers
 
-> cd chromium_git\chromium\src\third_party\angle\third_party\EGL-Registry\src  
-> git clone https://github.com/KhronosGroup/EGL-Registry .  
-> git checkout 7dea2ed79187cd13f76183c4b9100159b9e3e071  
-
-> cd chromium_git\chromium\src\third_party\angle\third_party\OpenCL-Docs\src  
-> git clone https://github.com/KhronosGroup/OpenCL-Docs .  
-> git checkout 774114e8761920b976d538d47fad8178d05984ec  
-
-> mkdir chromium_git\chromium\src\third_party\angle\third_party\vulkan-deps\spirv-headers\src  
-> cd chromium\src\third_party\angle\third_party\vulkan-deps\spirv-headers\src  
-> git clone https://github.com/KhronosGroup/SPIRV-Headers .  
-
-> mkdir chromium_git\chromium\src\third_party\angle\third_party\vulkan-deps\vulkan-headers\src  
-> cd chromium_git\chromium\src\third_party\angle\third_party\vulkan-deps\vulkan-headers\src  
-> git clone https://github.com/KhronosGroup/Vulkan-Headers .  
-
-You can get the correct commits from some of these repos by reading **chromium_git\chromium\src\third_party\angle\DEPS**.
+Then update the script clone_angle_dev_deps.bat with the correct commit hashes and run it.
 
 ### 3. Apply the patches for the Chromium and ANGLE repositories from the command line:
 
@@ -46,25 +32,9 @@ You can get the correct commits from some of these repos by reading **chromium_g
 > cd chromium_git\chromium\src\third_party\angle  
 > git apply gl_angle_shared_ext_angle.patch  
 
-### 4. Create a symbolic link that is required for the autogen scripts:
+### 4. Run generate_code.bat as admin to generate the new code required for the WebGL interface definitions and create a required symbolic link.
 
-> cd chromium_git\chromium\src\third_party\angle  
-> rmdir testing  
-> mklink /d testing X:\XXXX\chromium_git\chromium\src\testing  
-
-### 5. Execute the WebGL interface autogen scripts to update the WebGL definitions and bindings:
-
-> cd chromium_git\chromium\src\gpu\command_buffer  
-> python3 build_gles2_cmd_buffer.py  
-
-> cd chromium\src\ui\gl  
-> python3 generate_bindings.py  
-
-> cd chromium_git\chromium\src\third_party\angle  
-> python3 scripts\run_code_generation.py  
-
-> cd chromium_git\chromium\src\third_party\angle\src\libANGLE\renderer\gl  
-> python3 generate_gl_dispatch_table.py  
+### 5. Rebuild CEF.
 
 ## Example
 

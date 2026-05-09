@@ -109,13 +109,13 @@ index 16ec5d208..cb048dc28 100644
 --- a/src/libANGLE/Context.cpp
 +++ b/src/libANGLE/Context.cpp
 @@ -3797,6 +3797,7 @@ Extensions Context::generateSupportedExtensions() const
-     supportedExtensions.clientArraysANGLE             = true;
-     supportedExtensions.requestExtensionANGLE         = true;
-     supportedExtensions.multiDrawANGLE                = true;
-+    supportedExtensions.sharedExternalSurfaceANGLE    = true;
+     supportedExtensions.clientArraysANGLE                = true;
+     supportedExtensions.requestExtensionANGLE            = true;
+     supportedExtensions.multiDrawANGLE                   = true;
++    supportedExtensions.sharedExternalSurfaceANGLE       = true;
+     supportedExtensions.programBinaryReadinessQueryANGLE = true;
  
-     // Enable the no error extension if the context was created with the flag.
-     supportedExtensions.noErrorKHR = skipValidation();
+     const Limitations &limitations                  = getLimitations();
 @@ -6219,6 +6220,12 @@ void Context::texStorage3DMultisample(TextureType target,
                                                       ConvertToBool(fixedsamplelocations)));
  }
@@ -133,8 +133,13 @@ diff --git a/src/libANGLE/Texture.cpp b/src/libANGLE/Texture.cpp
 index 0cb215ba4..1699639ad 100644
 --- a/src/libANGLE/Texture.cpp
 +++ b/src/libANGLE/Texture.cpp
-@@ -1833,6 +1833,36 @@ angle::Result Texture::setStorageExternalMemory(Context *context,
-     return angle::Result::Continue;
+@@ -1833,11 +1833,41 @@ GLint Texture::getFormatSupportedCompressionRates(const Context *context,
+ GLint Texture::getFormatSupportedCompressionRates(const Context *context,
+                                                   GLenum internalformat,
+                                                   GLsizei bufSize,
+                                                   GLint *rates) const
+ {
+     return mTexture->getFormatSupportedCompressionRates(context, internalformat, bufSize, rates);
  }
  
 +angle::Result Texture::setTexImage2DShared(Context *context, GLuint handle)
@@ -169,7 +174,7 @@ index 0cb215ba4..1699639ad 100644
 +
  angle::Result Texture::generateMipmap(Context *context)
  {
-     // Release from previous calls to eglBindTexImage, to avoid calling the Impl after
+     // EGL_KHR_gl_image states that images are only orphaned when generating mipmaps if the texture
 diff --git a/src/libANGLE/Texture.h b/src/libANGLE/Texture.h
 index 9f69e7c9d..ba12ea590 100644
 --- a/src/libANGLE/Texture.h
@@ -329,16 +334,15 @@ index 4a313d127..a12df540b 100644
                                                       BindFlags bindFlags,
                                                       int size,
 diff --git a/src/libANGLE/renderer/d3d/d3d11/TextureStorage11.cpp b/src/libANGLE/renderer/d3d/d3d11/TextureStorage11.cpp
-index 9b1a08df6..c95d27ede 100644
 --- a/src/libANGLE/renderer/d3d/d3d11/TextureStorage11.cpp
 +++ b/src/libANGLE/renderer/d3d/d3d11/TextureStorage11.cpp
-@@ -1961,6 +1961,258 @@ void TextureStorage11_External::onLabelUpdate()
+@@ -1474,6 +1474,256 @@ void TextureStorage11_External::onLabelUpdate()
      }
  }
  
 +inline HANDLE handleFromUINT(GLuint handle)
 +{
-+    return (HANDLE)UINT(handle);
++    return (HANDLE)(uintptr_t)handle;
 +}
 +
 +static GLenum GetFormatFromSharedResource(Renderer11 *renderer, const HANDLE handle)
@@ -496,7 +500,6 @@ index 9b1a08df6..c95d27ede 100644
 +
 +angle::Result TextureStorage11_2DShared::findRenderTarget(const gl::Context *context,
 +                                                           const gl::ImageIndex &index,
-+                                                           GLsizei samples,
 +                                                           RenderTargetD3D **outRT) const
 +{
 +    // Render targets are not supported for external textures
@@ -506,7 +509,6 @@ index 9b1a08df6..c95d27ede 100644
 +
 +angle::Result TextureStorage11_2DShared::getRenderTarget(const gl::Context *context,
 +                                                          const gl::ImageIndex &index,
-+                                                          GLsizei samples,
 +                                                          RenderTargetD3D **outRT)
 +{
 +    // Render targets are not supported for external textures
@@ -553,7 +555,7 @@ index 9b1a08df6..c95d27ede 100644
 +}
 +
 +angle::Result TextureStorage11_2DShared::createUAVForImage(const gl::Context *context,
-+                                                            int level,
++                                                            const ImageKey &key,
 +                                                            DXGI_FORMAT format,
 +                                                            const TextureHelper11 &texture,
 +                                                            d3d11::SharedUAV *outUAV)
@@ -592,10 +594,9 @@ index 9b1a08df6..c95d27ede 100644
                                                               UINT bindFlags,
                                                               UINT miscFlags,
 diff --git a/src/libANGLE/renderer/d3d/d3d11/TextureStorage11.h b/src/libANGLE/renderer/d3d/d3d11/TextureStorage11.h
-index 777ce8374..3e57e4c56 100644
 --- a/src/libANGLE/renderer/d3d/d3d11/TextureStorage11.h
 +++ b/src/libANGLE/renderer/d3d/d3d11/TextureStorage11.h
-@@ -461,6 +461,77 @@ class TextureStorage11_External : public TextureStorage11
+@@ -480,6 +480,75 @@ class TextureStorage11_External : public TextureStorage11
      Image11 *mAssociatedImage;
  };
  
@@ -620,11 +621,9 @@ index 777ce8374..3e57e4c56 100644
 +                                    const TextureHelper11 **outResource) override;
 +    angle::Result findRenderTarget(const gl::Context *context,
 +                                   const gl::ImageIndex &index,
-+                                   GLsizei samples,
 +                                   RenderTargetD3D **outRT) const override;
 +    angle::Result getRenderTarget(const gl::Context *context,
 +                                  const gl::ImageIndex &index,
-+                                  GLsizei samples,
 +                                  RenderTargetD3D **outRT) override;
 +
 +    angle::Result copyToStorage(const gl::Context *context, TextureStorage *destStorage) override;
@@ -657,7 +656,7 @@ index 777ce8374..3e57e4c56 100644
 +                                    const TextureHelper11 &texture,
 +                                    d3d11::SharedSRV *outSRV) override;
 +    angle::Result createUAVForImage(const gl::Context *context,
-+                                    int level,
++                                    const ImageKey &key,
 +                                    DXGI_FORMAT format,
 +                                    const TextureHelper11 &texture,
 +                                    d3d11::SharedUAV *outUAV) override;
@@ -696,13 +695,13 @@ index 42fd1a334..6e173eca5 100644
  
 +bool ValidateTexImage2DShared(const Context *context, angle::EntryPoint entryPoint, GLuint handle)
 +{
-+	TextureType target = TextureType::_2D;
++    TextureType target = TextureType::_2D;
 +    if (!ValidTextureTarget(context, target))
 +    {
 +        ANGLE_VALIDATION_ERROR(GL_INVALID_ENUM, kInvalidTextureTarget);
 +        return false;
 +    }
-+	
++
 +    if (context->getTextureByType(target) == nullptr)
 +    {
 +        // Should only be possible for external textures
@@ -712,9 +711,9 @@ index 42fd1a334..6e173eca5 100644
 +    return true;
 +}
 +
- // GL_ANGLE_texture_storage_external
  bool ValidateTexImage2DExternalANGLE(const Context *context,
                                       angle::EntryPoint entryPoint,
+                                      TextureTarget target,
 diff --git a/src/libANGLE/renderer/d3d/TextureStorage.h b/src/libANGLE/renderer/d3d/TextureStorage.h
 index 9940a3c88..c2361d46a 100644
 --- a/src/libANGLE/renderer/d3d/TextureStorage.h
@@ -741,3 +740,25 @@ index 9aceb6bad..2ff24c13f 100644
      TextureStorage *createTextureStorageEGLImage(EGLImageD3D *eglImage,
                                                   RenderTargetD3D *renderTargetD3D,
                                                   const std::string &label) override;
+diff --git a/scripts/run_code_generation.py b/scripts/run_code_generation.py
+index 2021c2eb38..c3da9e6812 100755
+--- a/scripts/run_code_generation.py
++++ b/scripts/run_code_generation.py
+@@ -136,7 +136,7 @@ generators = {
+ # Fast and supports --verify-only without hashes.
+ hashless_generators = {
+     'ANGLE features': 'include/platform/gen_features.py',
+-    'Test spec JSON': 'infra/specs/generate_test_spec_json.py',
++    # 'Test spec JSON': 'infra/specs/generate_test_spec_json.py',
+ }
+ 
+ 
+@@ -285,7 +285,7 @@ def main():
+         args = ['git.bat'] if os.name == 'nt' else ['git']
+         args += ['cl', 'format']
+         print('Calling git cl format')
+-        subprocess.check_call(args)
++        # subprocess.check_call(args)
+ 
+         if full_formats:
+             # Some formattings fail, and thus we can never submit such a cl because

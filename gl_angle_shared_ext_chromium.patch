@@ -136,3 +136,19 @@ index 12df91de42663..cb33bbb430aad 100755
  { 'return_type': 'void',
    'versions': [{ 'name': 'glTexImage3D' }],
    'arguments':
+diff --git a/third_party/blink/renderer/modules/webgl/webgl2_rendering_context_webgpu.h b/third_party/blink/renderer/modules/webgl/webgl2_rendering_context_webgpu.h
+index db83b4ac9d313..51c903cbfa9b8 100644
+--- a/third_party/blink/renderer/modules/webgl/webgl2_rendering_context_webgpu.h
++++ b/third_party/blink/renderer/modules/webgl/webgl2_rendering_context_webgpu.h
+@@ -21,6 +21,11 @@ class WebGL2RenderingContextWebGPU final
+   // CanvasRenderingContext implementation
+   V8RenderingContext* AsV8RenderingContext() final;
+   V8OffscreenRenderingContext* AsV8OffscreenRenderingContext() final;
++  
++  void texImage2DShared(GLenum target  )
++  {
++      NOTIMPLEMENTED();
++  }
+ };
+ 
+ }  // namespace blink
